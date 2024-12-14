@@ -1,0 +1,15 @@
+Public Class adminForm
+    ' Event untuk Tombol Playstation
+    Private Sub Buttonps_Click(sender As Object, e As EventArgs) Handles Buttonps.Click
+        Dim form3 As New Form3()
+        form3.Show()
+        Me.Hide()
+    End Sub
+
+    ' Event untuk Tombol Data Penjualan
+    Private Sub ButtonDatpen_Click(sender As Object, e As EventArgs) Handles ButtonDatpen.Click
+        Dim form4 As New Form4()
+        form4.Show()
+        Me.Hide()
+    End Sub
+End Class
