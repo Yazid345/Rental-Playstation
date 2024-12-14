@@ -1,0 +1,70 @@
+Imports Microsoft.Reporting.WinForms
+Imports MySql.Data.MySqlClient
+Imports System.Globalization
+
+Public Class Form4
+    Private Sub Form4_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+        ' Set path ReportViewer, tapi jangan langsung memuat data
+        ReportViewer1.LocalReport.ReportPath = "Report1.rdlc"
+        ReportViewer1.LocalReport.DataSources.Clear() ' Bersihkan data awal
+        ReportViewer1.RefreshReport()
+    End Sub
+
+    Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        Dim orderID As String = txtOrderID.Text.Trim()
+
+        ' Validasi input Order ID
+        If String.IsNullOrEmpty(orderID) Then
+            MessageBox.Show("Masukkan Order ID terlebih dahulu.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        ' Ambil data dari database berdasarkan Order ID
+        Dim connString As String = "server=localhost;userid=root;password=;database=dbtrial;"
+        Dim conn As New MySqlConnection(connString)
+        Dim dt As New DataTable()
+
+        Try
+            conn.Open()
+            Dim query As String = "SELECT order_id, customer_name, jenis_playstation, durasi_sewa, harga, metode_pembayaran, order_date FROM `orders` WHERE order_id = @order_id"
+            Dim cmd As New MySqlCommand(query, conn)
+            cmd.Parameters.AddWithValue("@order_id", orderID)
+            Dim adapter As New MySqlDataAdapter(cmd)
+            adapter.Fill(dt)
+
+            ' Periksa apakah data ditemukan
+            If dt.Rows.Count = 0 Then
+                MessageBox.Show("Data tidak ditemukan untuk Order ID yang dimasukkan.", "Informasi", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            ' Tambahkan kolom untuk format mata uang jika belum ada
+            If Not dt.Columns.Contains("harga_format") Then
+                dt.Columns.Add("harga_format", GetType(String))
+            End If
+
+            ' Manipulasi data untuk ReportViewer
+            For Each row As DataRow In dt.Rows
+                ' Tambahkan "jam" ke durasi_sewa
+                row("durasi_sewa") = row("durasi_sewa").ToString() & " jam"
+
+                ' Format harga sebagai mata uang Indonesia untuk kolom 'harga_format'
+                Dim hargaValue As Decimal = Convert.ToDecimal(row("harga"))
+                row("harga_format") = hargaValue.ToString("C", CultureInfo.GetCultureInfo("id-ID"))
+            Next
+
+            ' Tampilkan data di ReportViewer
+            Dim rds As New ReportDataSource("DataSet1", dt) ' DataSet1 sesuai dengan dataset di Report1.rdlc
+            ReportViewer1.LocalReport.DataSources.Clear()
+            ReportViewer1.LocalReport.DataSources.Add(rds)
+            ReportViewer1.RefreshReport()
+
+        Catch ex As MySqlException
+            MessageBox.Show("Terjadi kesalahan saat mengambil data: " & ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Catch ex As Exception
+            MessageBox.Show("Terjadi kesalahan umum: " & ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            conn.Close()
+        End Try
+    End Sub
+End Class
