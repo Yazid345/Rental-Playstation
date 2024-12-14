@@ -1,0 +1,143 @@
+Imports MySql.Data.MySqlClient
+
+Public Class Form3
+    ' Fungsi untuk menambahkan data ke database
+    Private Sub Simpan_Click(sender As Object, e As EventArgs) Handles simpan.Click
+        ' Validasi input
+        If Not IsInputValid() Then Return
+
+        Dim query As String = "INSERT INTO tblps (playstation, jumlah) VALUES (@playstation, @jumlah)"
+        Using conn As MySqlConnection = ModuleKoneksi.GetConnection()
+            Try
+                conn.Open()
+                Using cmd As New MySqlCommand(query, conn)
+                    cmd.Parameters.AddWithValue("@playstation", txtPlaystation.Text)
+                    cmd.Parameters.AddWithValue("@jumlah", Integer.Parse(txtJumlah.Text)) ' Pastikan hanya angka
+                    cmd.ExecuteNonQuery()
+                    MessageBox.Show("Data berhasil disimpan!", "Informasi", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    LoadData()
+                    ClearInputFields()
+                End Using
+            Catch ex As Exception
+                HandleDatabaseError(ex)
+            End Try
+        End Using
+    End Sub
+
+    ' Fungsi untuk memuat data dari tabel ke DataGridView
+    Private Sub LoadData()
+        Dim query As String = "SELECT * FROM tblps ORDER BY playstation"
+        Using conn As MySqlConnection = ModuleKoneksi.GetConnection()
+            Try
+                conn.Open()
+                Dim adapter As New MySqlDataAdapter(query, conn)
+                Dim table As New DataTable()
+                adapter.Fill(table)
+                DataGridView1.DataSource = table
+            Catch ex As Exception
+                HandleDatabaseError(ex)
+            End Try
+        End Using
+    End Sub
+
+    ' Fungsi untuk menghapus data
+    Private Sub Hapus_Click(sender As Object, e As EventArgs) Handles hapus.Click
+        ' Validasi input
+        If String.IsNullOrWhiteSpace(txtPlaystation.Text) Then
+            MessageBox.Show("Field PlayStation tidak boleh kosong.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        Dim query As String = "DELETE FROM tblps WHERE playstation = @playstation"
+        Using conn As MySqlConnection = ModuleKoneksi.GetConnection()
+            Try
+                conn.Open()
+                Using cmd As New MySqlCommand(query, conn)
+                    cmd.Parameters.AddWithValue("@playstation", txtPlaystation.Text)
+                    If cmd.ExecuteNonQuery() > 0 Then
+                        MessageBox.Show("Data berhasil dihapus!", "Informasi", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                        LoadData()
+                        ClearInputFields()
+                    Else
+                        MessageBox.Show("Data tidak ditemukan.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    End If
+                End Using
+            Catch ex As Exception
+                HandleDatabaseError(ex)
+            End Try
+        End Using
+    End Sub
+
+    ' Fungsi untuk memperbarui data
+    Private Sub Ubah_Click(sender As Object, e As EventArgs) Handles ubah.Click
+        ' Validasi input
+        If Not IsInputValid() Then Return
+
+        Dim query As String = "UPDATE tblps SET jumlah = @jumlah WHERE playstation = @playstation"
+        Using conn As MySqlConnection = ModuleKoneksi.GetConnection()
+            Try
+                conn.Open()
+                Using cmd As New MySqlCommand(query, conn)
+                    cmd.Parameters.AddWithValue("@jumlah", Integer.Parse(txtJumlah.Text)) ' Pastikan hanya angka
+                    cmd.Parameters.AddWithValue("@playstation", txtPlaystation.Text)
+                    If cmd.ExecuteNonQuery() > 0 Then
+                        MessageBox.Show("Data berhasil diupdate!", "Informasi", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                        LoadData()
+                        ClearInputFields()
+                    Else
+                        MessageBox.Show("Data tidak ditemukan.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    End If
+                End Using
+            Catch ex As Exception
+                HandleDatabaseError(ex)
+            End Try
+        End Using
+    End Sub
+
+    ' Fungsi validasi input
+    Private Function IsInputValid() As Boolean
+        If String.IsNullOrWhiteSpace(txtPlaystation.Text) OrElse String.IsNullOrWhiteSpace(txtJumlah.Text) Then
+            MessageBox.Show("Pastikan semua field diisi.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return False
+        End If
+
+        If Not Integer.TryParse(txtJumlah.Text, Nothing) Then
+            MessageBox.Show("Field Jumlah harus berupa angka.", "Peringatan", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return False
+        End If
+
+        Return True
+    End Function
+
+    ' Fungsi untuk menangani error database
+    Private Sub HandleDatabaseError(ex As Exception)
+        MessageBox.Show("Terjadi kesalahan: " & ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+    End Sub
+
+    ' Fungsi untuk menghapus input
+    Private Sub ClearInputFields()
+        txtPlaystation.Clear()
+        txtJumlah.Clear()
+    End Sub
+
+    ' Event untuk memuat data saat form dibuka
+    Private Sub Form3_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+        LoadData()
+    End Sub
+
+    ' Event untuk memilih data di DataGridView
+    Private Sub DataGridView1_CellClick(sender As Object, e As DataGridViewCellEventArgs) Handles DataGridView1.CellClick
+        If e.RowIndex >= 0 Then
+            Dim row As DataGridViewRow = DataGridView1.Rows(e.RowIndex)
+            txtPlaystation.Text = row.Cells("playstation").Value.ToString()
+            txtJumlah.Text = row.Cells("jumlah").Value.ToString()
+        End If
+    End Sub
+
+    ' Validasi agar txtJumlah hanya menerima angka
+    Private Sub txtJumlah_KeyPress(sender As Object, e As KeyPressEventArgs) Handles txtJumlah.KeyPress
+        If Not Char.IsDigit(e.KeyChar) AndAlso Not Char.IsControl(e.KeyChar) Then
+            e.Handled = True
+        End If
+    End Sub
+End Class
