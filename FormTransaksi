@@ -1,0 +1,227 @@
+Imports MySql.Data.MySqlClient
+
+Public Class Form2
+    ' Fungsi untuk menghasilkan Order ID baru secara otomatis
+    Public Function GenerateOrderID() As String
+        Dim newOrderID As String = ""
+        Dim lastOrderID As String = ""
+
+        ' Query untuk mendapatkan Order ID terakhir
+        Dim query As String = "SELECT order_id FROM orders ORDER BY order_id DESC LIMIT 1"
+        Dim conn As MySqlConnection = GetConnection()
+
+        Using command As New MySqlCommand(query, conn)
+            Try
+                If conn.State = ConnectionState.Closed Then conn.Open()
+
+                Dim reader As MySqlDataReader = command.ExecuteReader()
+                If reader.Read() Then
+                    lastOrderID = reader("order_id").ToString()
+                End If
+                reader.Close()
+            Catch ex As MySqlException
+                MessageBox.Show("Error : " & ex.Message)
+            Finally
+                If conn.State = ConnectionState.Open Then conn.Close()
+            End Try
+        End Using
+
+        ' Membuat Order ID baru
+        If lastOrderID = "" Then
+            newOrderID = "ORD1001"
+        Else
+            Dim numericPart As Integer = Integer.Parse(lastOrderID.Substring(3))
+            numericPart += 1
+            newOrderID = "ORD" & numericPart.ToString("D4")
+        End If
+
+        Return newOrderID
+    End Function
+
+    ' Fungsi untuk memasukkan pesanan ke dalam database
+    Public Sub InsertOrder()
+        Dim orderID As String = txtOrderId.Text
+        Dim customerName As String = txtCustomer.Text
+        Dim jenisPlaystation As String = ComboBox1.SelectedItem.ToString()
+        Dim durasiSewa As Integer = Convert.ToInt32(NumericUpDown1.Value)
+        Dim hargaString As String = Hrg.Text.Replace("Rp", "").Replace(".", "").Replace(",", "").Trim() ' Mengambil harga setelah formattable
+
+        ' Validasi input
+        If String.IsNullOrEmpty(customerName) OrElse String.IsNullOrEmpty(jenisPlaystation) OrElse
+           durasiSewa <= 0 OrElse String.IsNullOrEmpty(hargaString) OrElse
+           String.IsNullOrEmpty(ComboBox3.SelectedItem.ToString()) Then
+            MessageBox.Show("Harap lengkapi semua kolom.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Exit Sub
+        End If
+
+        ' Coba konversi harga menjadi Decimal
+        Dim parsedHarga As Decimal
+        If Decimal.TryParse(hargaString, parsedHarga) Then
+            ' Koneksi ke database
+            Dim conn As MySqlConnection = GetConnection()
+
+            ' Query untuk memasukkan pesanan
+            Dim query As String = "INSERT INTO orders (order_id, customer_name, jenis_playstation, durasi_sewa, harga, metode_pembayaran, order_date) " &
+                                  "VALUES (@orderID, @customerName, @jenisPlaystation, @durasiSewa, @harga, @metodePembayaran, CURRENT_TIMESTAMP)"
+            Using command As New MySqlCommand(query, conn)
+                command.Parameters.AddWithValue("@orderID", orderID)
+                command.Parameters.AddWithValue("@customerName", customerName)
+                command.Parameters.AddWithValue("@jenisPlaystation", jenisPlaystation)
+                command.Parameters.AddWithValue("@durasiSewa", durasiSewa)
+                command.Parameters.AddWithValue("@harga", parsedHarga)
+                command.Parameters.AddWithValue("@metodePembayaran", ComboBox3.SelectedItem.ToString())
+
+                Try
+                    If conn.State = ConnectionState.Closed Then conn.Open()
+
+                    command.ExecuteNonQuery()
+                    MessageBox.Show("Order berhasil ditambahkan dengan Order ID: " & orderID, "Sukses", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    RefreshForm()
+                Catch ex As MySqlException
+                    MessageBox.Show("Error saat menambahkan order: " & ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                Finally
+                    If conn.State = ConnectionState.Open Then conn.Close()
+                End Try
+            End Using
+        Else
+            MessageBox.Show("Format harga tidak valid. Harap periksa kembali.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End If
+    End Sub
+
+    ' Sub untuk mengosongkan form
+    Private Sub RefreshForm()
+        txtCustomer.Clear()
+        txtCustomer.Focus()
+        txtOrderId.Text = GenerateOrderID()
+        Hrg.Clear()
+        ComboBox1.SelectedIndex = -1
+        ComboBox3.SelectedIndex = -1
+        NumericUpDown1.Value = 1
+    End Sub
+
+    ' Fungsi untuk mengisi ComboBox dari database
+    Private Sub LoadComboBoxData()
+        Dim conn As MySqlConnection = GetConnection()
+
+        ' Mengisi ComboBox1 (Jenis PlayStation)
+        Dim queryPlayStation As String = "SELECT jenis_playstation FROM playstation_rates"
+        Using cmd As New MySqlCommand(queryPlayStation, conn)
+            Try
+                If conn.State = ConnectionState.Closed Then conn.Open()
+
+                Dim reader As MySqlDataReader = cmd.ExecuteReader()
+                While reader.Read()
+                    ComboBox1.Items.Add(reader("jenis_playstation").ToString())
+                End While
+                reader.Close()
+            Catch ex As Exception
+                MessageBox.Show("Error loading PlayStation data: " & ex.Message)
+            End Try
+        End Using
+
+        ' Mengisi ComboBox3 (Metode Pembayaran)
+        Dim queryPayment As String = "SELECT nama_metode FROM payment_methods"
+        Using cmd As New MySqlCommand(queryPayment, conn)
+            Try
+                Dim reader As MySqlDataReader = cmd.ExecuteReader()
+                While reader.Read()
+                    ComboBox3.Items.Add(reader("nama_metode").ToString())
+                End While
+                reader.Close()
+            Catch ex As Exception
+                MessageBox.Show("Error loading payment methods: " & ex.Message)
+            Finally
+                If conn.State = ConnectionState.Open Then conn.Close()
+            End Try
+        End Using
+    End Sub
+
+    ' Event untuk menghitung harga berdasarkan pilihan
+    Private Sub UpdateHarga()
+        Dim jenisPlaystation As String = ComboBox1.SelectedItem?.ToString()
+        Dim durasiSewa As Integer = Convert.ToInt32(NumericUpDown1.Value)
+
+        If String.IsNullOrEmpty(jenisPlaystation) OrElse durasiSewa <= 0 Then
+            Hrg.Text = ""
+            Exit Sub
+        End If
+
+        ' Mengambil harga dari database
+        Dim hargaPerJam As Integer = 0
+        Dim conn As MySqlConnection = GetConnection()
+        Dim query As String = "SELECT harga_per_jam FROM playstation_rates WHERE jenis_playstation = @jenisPlaystation"
+
+        Using cmd As New MySqlCommand(query, conn)
+            cmd.Parameters.AddWithValue("@jenisPlaystation", jenisPlaystation)
+            Try
+                If conn.State = ConnectionState.Closed Then conn.Open()
+
+                Dim result = cmd.ExecuteScalar()
+                If result IsNot Nothing Then hargaPerJam = Convert.ToInt32(result)
+            Catch ex As Exception
+                MessageBox.Show("Error retrieving harga: " & ex.Message)
+            Finally
+                If conn.State = ConnectionState.Open Then conn.Close()
+            End Try
+        End Using
+
+        ' Menghitung harga total
+        Dim totalHarga As Integer = hargaPerJam * durasiSewa
+        Hrg.Text = "Rp " & totalHarga.ToString("N0") ' Format tanpa ,00
+    End Sub
+
+
+
+    ' Event untuk inisialisasi form
+    Private Sub Form2_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+        txtOrderId.Text = GenerateOrderID()
+        LoadComboBoxData()
+
+        ' Mengatur properti NumericUpDown untuk durasi sewa
+        NumericUpDown1.Minimum = 1
+        NumericUpDown1.Maximum = 24 ' Atur maksimum sesuai kebutuhan
+        NumericUpDown1.Value = 1
+    End Sub
+
+    Private Sub ComboBox1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles ComboBox1.SelectedIndexChanged
+        UpdateHarga()
+    End Sub
+
+    Private Sub NumericUpDown1_ValueChanged(sender As Object, e As EventArgs) Handles NumericUpDown1.ValueChanged
+        UpdateHarga()
+    End Sub
+
+    Private Sub Label8_Click(sender As Object, e As EventArgs)
+
+    End Sub
+
+    Private Sub Cnfrmps_Click(sender As Object, e As EventArgs) Handles Cnfrmps.Click
+        ' Ambil nilai dari inputan pengguna
+        Dim orderID As String = txtOrderId.Text
+        Dim customerName As String = txtCustomer.Text
+        Dim jenisPlaystation As String = ComboBox1.SelectedItem.ToString()
+        Dim durasiSewa As Integer = Convert.ToInt32(NumericUpDown1.Value)
+        Dim hargaString As String = Hrg.Text
+
+        ' Validasi input
+        If String.IsNullOrEmpty(customerName) OrElse String.IsNullOrEmpty(jenisPlaystation) OrElse
+           durasiSewa <= 0 OrElse String.IsNullOrEmpty(hargaString) OrElse
+           String.IsNullOrEmpty(ComboBox3.SelectedItem.ToString()) Then
+            MessageBox.Show("Harap lengkapi semua kolom.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Exit Sub
+        End If
+
+        ' Menghilangkan karakter yang tidak diinginkan (misalnya, tanda mata uang dan tanda titik)
+        hargaString = hargaString.Replace("Rp", "").Replace(",", "").Trim()
+
+        ' Coba konversi harga menjadi integer
+        Dim parsedHarga As Decimal
+        If Decimal.TryParse(hargaString, parsedHarga) Then
+            ' Simpan ke database
+            InsertOrder()
+        Else
+            MessageBox.Show("Format harga tidak valid. Harap periksa kembali.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End If
+    End Sub
+
+End Class
